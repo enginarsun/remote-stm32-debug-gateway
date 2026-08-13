@@ -101,6 +101,23 @@ A few non-obvious issues came up during setup, in case they're useful to someone
 
 ## Roadmap
 
-- [ ] Web-based flash/log interface instead of raw SSH
+- [x] Web-based flash/log interface instead of raw SSH
 - [ ] Extend to STM32WL55 (LoRaWAN) target
 - [ ] Automated flash-and-verify test on every firmware push (CI-driven hardware-in-the-loop)
+
+## Web interface
+
+A minimal Flask web UI (`web/app.py`) replaces raw SSH for day-to-day use: a "Flash Et" button triggers the same `st-flash` command shown above, and a live UART panel polls `/dev/ttyUSB0` once per second so firmware output is visible directly in the browser, no terminal required.
+
+Reachable over the local network or, via Tailscale, from anywhere:
+
+![Web interface over Tailscale](docs/images/06-web-interface-tailscale.png)
+
+Run it:
+```bash
+cd web
+pip install flask pyserial --break-system-packages
+python3 app.py
+```
+
+Then open `http://<pi-address>:5000` (local IP or Tailscale IP) in a browser.
