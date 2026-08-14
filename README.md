@@ -60,8 +60,10 @@ Both USB peripherals share a single powered hub connected to the Pi's only USB d
 The firmware/ folder contains a minimal bare-metal example (no HAL, direct register access):
 
 - startup.c: vector table and reset handler
-- main.c: blinks PC13 and sends a counter string over USART1 (PA9/PA10, 9600 baud)
+- main.c: blinks PC13 and reads a DHT11 temperature/humidity sensor via bit-banged single-wire protocol, sending readings over USART1 (PA9/PA10, 9600 baud)
 - stm32f103.ld: linker script for the STM32F103C8T6 memory layout
+
+The DHT11 is wired to PA0 (data), 3.3V, and GND. Reading it requires precise microsecond-level timing (an 18ms start pulse, then decoding 40 bits based on pulse width), implemented using the Cortex-M SysTick timer for delays. An earlier version used the STM32's internal temperature sensor via ADC1 channel 16, but this repeatedly caused a HardFault during ADC calibration; switching to the DHT11's simpler digital protocol avoided the ADC register issues entirely and gave more useful data (temperature and humidity, not just temperature).
 
 Build:
 ```bash
@@ -91,6 +93,10 @@ Flashing over Tailscale, from a network outside the Pi's local LAN:
 
 ![Remote SSH over Tailscale](docs/images/05-remote-ssh-tailscale.png)
 
+Live DHT11 sensor readings streamed through the web interface:
+
+![Live DHT11 data in web interface](docs/images/07-dht11-live-data.png)
+
 ## Notes from getting it working
 
 A few non-obvious issues came up during setup, in case they're useful to someone else:
@@ -98,10 +104,13 @@ A few non-obvious issues came up during setup, in case they're useful to someone
 - **Locked target chip.** The Blue Pill initially failed to connect over SWD (init mode failed, later external reset detected loops) because factory firmware was reconfiguring the SWD pins as GPIO shortly after reset. Fixed with st-flash --connect-under-reset erase to mass-erase the flash before the errant firmware could run.
 - **Ground loop / spontaneous Pi reboot.** Powering the target board from a second, independent source (a PC's USB port) while it was also connected to the Pi-powered ST-Link caused the Pi to reboot unexpectedly. Resolved by powering the whole chain from a single source (Pi to ST-Link to target).
 - **Garbled UART output.** Output was unreadable until the USART baud-rate register was corrected: BRR = 0x0341 for 9600 baud at the STM32's default 8 MHz internal clock (an earlier, incorrect value produced roughly 12800 baud, which read as garbage at a 9600 terminal setting).
+- **ADC HardFault on the internal temperature sensor.** Reading the STM32's internal temperature sensor through ADC1 channel 16 reliably caused a HardFault during the calibration step (confirmed with openocd's halt command, which showed the core stuck in the HardFault handler). Rather than continue debugging the ADC calibration sequence, the firmware was switched to a DHT11 external sensor instead, which uses a simple digital protocol and avoided the issue entirely.
+- **Split UART lines in the web interface.** The Flask /uart endpoint originally opened and closed the serial port on every poll, sometimes catching a sensor reading mid-line and displaying it broken across two page refreshes. Fixed by buffering completed lines server-side and only displaying whole lines, discarding any partial line still in progress.
 
 ## Roadmap
 
 - [x] Web-based flash/log interface instead of raw SSH
+- [x] Read a real sensor (DHT11 temperature/humidity) instead of a synthetic counter
 - [ ] Extend to STM32WL55 (LoRaWAN) target
 - [ ] Automated flash-and-verify test on every firmware push (CI-driven hardware-in-the-loop)
 

@@ -45,12 +45,15 @@ HTML = """
                 });
         }
 
-        setInterval(updateUart, 1000);
+        setInterval(updateUart, 2000);
         updateUart();
     </script>
 </body>
 </html>
 """
+
+uart_buffer = []
+MAX_LINES = 15
 
 @app.route('/')
 def index():
@@ -67,15 +70,30 @@ def flash():
 
 @app.route('/uart')
 def uart():
+    global uart_buffer
     try:
         ser = serial.Serial('/dev/ttyUSB0', 9600, timeout=1, dsrdtr=False, rtscts=False)
-        lines = []
-        for _ in range(10):
-            line = ser.readline().decode(errors='ignore').strip()
-            if line:
-                lines.append(line)
+
+        partial = ""
+        for _ in range(30):
+            chunk = ser.read(64).decode(errors='ignore')
+            if not chunk:
+                break
+            partial += chunk
+
         ser.close()
-        return jsonify({'lines': '\n'.join(lines) if lines else 'Veri bekleniyor...'})
+
+        lines = partial.split('\r\n')
+
+        complete_lines = [l.strip() for l in lines[:-1] if l.strip()]
+
+        for line in complete_lines:
+            uart_buffer.append(line)
+
+        uart_buffer = uart_buffer[-MAX_LINES:]
+
+        display_text = '\n'.join(uart_buffer) if uart_buffer else 'Veri bekleniyor...'
+        return jsonify({'lines': display_text})
     except Exception as e:
         return jsonify({'lines': 'UART hatasi: ' + str(e)})
 
