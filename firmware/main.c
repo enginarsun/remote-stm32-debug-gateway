@@ -185,7 +185,7 @@ int main(void) {
             uart_send_string("\r\n");
         }
 
-        delay(3000000);
+        delay(3500000);
     }
 }
 
