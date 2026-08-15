@@ -111,8 +111,8 @@ A few non-obvious issues came up during setup, in case they're useful to someone
 
 - [x] Web-based flash/log interface instead of raw SSH
 - [x] Read a real sensor (DHT11 temperature/humidity) instead of a synthetic counter
+- [x] Automated flash-and-verify test on every firmware push (CI-driven hardware-in-the-loop)
 - [ ] Extend to STM32WL55 (LoRaWAN) target
-- [ ] Automated flash-and-verify test on every firmware push (CI-driven hardware-in-the-loop)
 
 ## Web interface
 
@@ -130,3 +130,30 @@ python3 app.py
 ```
 
 Then open `http://<pi-address>:5000` (local IP or Tailscale IP) in a browser.
+
+
+## Continuous integration (hardware-in-the-loop)
+
+GitHub's official Actions runner requires ARMv7+; since the Pi Zero W uses the older ARMv6 instruction set, the .NET-based runner segfaults during configuration (a known, documented limitation of the official runner, not specific to this project -- see [actions/runner#688](https://github.com/actions/runner/issues/688)).
+
+Instead of the official runner, the `ci/` folder contains a small polling-based watcher (`ci_watcher.py`) that achieves the same push-to-test automation without depending on ARMv7:
+
+1. Every 60 seconds, the Pi checks the GitHub API for the latest commit on `main` (authenticated with a personal access token, since the repo is private).
+2. On a new commit: pulls the change, cross-compiles the firmware, flashes it over SWD, then reads the UART for 8 seconds.
+3. If the output contains real sensor readings (`Sicaklik=` and `Nem=`), the pipeline is marked PASS; otherwise FAIL. Every step is logged with a timestamp.
+
+This design makes only outbound requests to GitHub -- no inbound port is opened, so there's nothing on the network for an attacker to reach. A `systemd` unit (`ci/ci-watcher.service`) keeps the watcher running persistently and restarts it automatically if it crashes or the Pi reboots.
+
+Example log from a real push-triggered run:
+
+```
+[21:01:17] New commit found: d50360b217e70316e2dd2f931df156147951baeb
+[21:01:17] === New commit detected, starting pipeline ===
+[21:01:20] git pull: exit=0
+[21:01:23] compile: exit=0
+[21:01:24] flash: exit=0
+[21:01:24] Flash successful, reading UART for verification...
+[21:01:34] PASS: sensor output detected
+Nem=35% Sicaklik=34 C
+[21:01:34] === Pipeline PASSED ===
+```

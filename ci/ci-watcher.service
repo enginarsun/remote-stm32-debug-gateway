@@ -1,0 +1,14 @@
+[Unit]
+Description=STM32 CI Watcher
+After=network.target
+
+[Service]
+Type=simple
+User=engin
+WorkingDirectory=/home/engin
+ExecStart=/usr/bin/python3 /home/engin/ci_watcher.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
